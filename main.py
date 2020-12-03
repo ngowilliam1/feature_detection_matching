@@ -135,50 +135,12 @@ if __name__ == "__main__":
                 kp2, des2 = orb.detectAndCompute(img_right, None)
                 perImageDepth = {"d":[], "gtD":[]}
 
-                # Perform feature matching (without outlier rejection)
                 if not args.outlierReject:
-                    # Match descriptors.
+                    # Perform feature matching (without outlier rejection)
                     matches = flann.match(des1, des2)
-                    
-                    # Filter match to be same y axis pixel
-                    idxToKeep = support.checkIfYMatches(kp1, kp2, matches)
-                    keptMatches = [matches[i] for i in idxToKeep]
-
-                    # Get focal length and baseline
-                    train_text_path = calib_dir +'/' + sample_name + '.txt'
-                    frame_calib = support.read_frame_calib(train_text_path)
-                    calib = support.get_stereo_calibration(frame_calib.p2, frame_calib.p3)
-                    baseline = calib.baseline
-                    focal = calib.f
-                    
-                    # Get ground truth depth from lidar
-                    gtDepthPath = gt_depth_dir + '/' + sample_name + '.png'
-                    imgDepth = cv.imread(gtDepthPath, 0)
-                    
-                    # Calculate disparity and depth
-                    disparity, gtDepth, pixelU, pixelV = support.calculateResults(kp1, kp2, keptMatches, imgDepth)
-                    calculatedDepth = list(focal*baseline/disparity)
-                    
-                    for idx, disp in enumerate(disparity):
-                        # Only compare depths if in ground truth the data is available (depth > 0) and remove case where calculataedDepth = inf (ie disparity = 0)
-                        if gtDepth[idx] > 0 and disp > 0:
-                            if args.saveTrainDepthResults:
-                                toKeep["imageName"].append(sample_name + '.png')
-                                toKeep["u"].append(pixelU[idx])
-                                toKeep["v"].append(pixelV[idx])
-                                toKeep["disparity"].append(disp)
-                                toKeep["depth"].append(calculatedDepth[idx])
-                                toKeep["GTDepth"].append(gtDepth[idx])
-                            savedDepth.append(calculatedDepth[idx])
-                            savedGTDepth.append(gtDepth[idx])
-                            perImageDepth["d"].append(calculatedDepth[idx])
-                            perImageDepth["gtD"].append(gtDepth[idx])
-                
-                # Perform feature matching (with outlier rejection)
-                if args.outlierReject:
-                    # Match descriptors.
+                elif args.outlierReject:
+                    # Perform feature matching (with outlier rejection)
                     matches = flann.knnMatch(des1, des2, k=2)
-
                     # Apply Lowe's ratio test and distance threshold
                     good = []
                     for m,n in matches:
@@ -186,39 +148,41 @@ if __name__ == "__main__":
                             good.append(m)
                     matches = good
 
-                    # Filter match to be same y axis pixel
-                    idxToKeep = support.checkIfYMatches(kp1, kp2, matches)
-                    keptMatches = [matches[i] for i in idxToKeep]
-
-                    # Get focal length and baseline
-                    train_text_path = calib_dir +'/' + sample_name + '.txt'
-                    frame_calib = support.read_frame_calib(train_text_path)
-                    calib = support.get_stereo_calibration(frame_calib.p2, frame_calib.p3)
-                    baseline = calib.baseline
-                    focal = calib.f
-                    
-                    gtDepthPath = gt_depth_dir + '/' + sample_name + '.png'
-                    imgDepth = cv.imread(gtDepthPath, 0)
-                    
-
-                    disparity, gtDepth, pixelU, pixelV = support.calculateResults(kp1, kp2, keptMatches, imgDepth)
-                    calculatedDepth = list(focal*baseline/disparity)
-                    for idx, disp in enumerate(disparity):
+                # Filter match to be same y axis pixel
+                idxToKeep = support.checkIfYMatches(kp1, kp2, matches)
+                matches = [matches[i] for i in idxToKeep]
+                
+                # Get focal length and baseline
+                train_text_path = calib_dir +'/' + sample_name + '.txt'
+                frame_calib = support.read_frame_calib(train_text_path)
+                calib = support.get_stereo_calibration(frame_calib.p2, frame_calib.p3)
+                baseline = calib.baseline
+                focal = calib.f
+                
+                # Get ground truth depth from lidar
+                gtDepthPath = gt_depth_dir + '/' + sample_name + '.png'
+                imgDepth = cv.imread(gtDepthPath, 0)
+                
+                # Calculate disparity and depth
+                disparity, gtDepth, pixelU, pixelV = support.calculateResults(kp1, kp2, matches, imgDepth)
+                calculatedDepth = list(focal*baseline/disparity)
+                
+                for idx, disp in enumerate(disparity):
+                    if gtDepth[idx] > 0 and disp > 0:
                         # Only compare depths if in ground truth the data is available (depth > 0) and remove case where calculataedDepth = inf (ie disparity = 0)
-                        if gtDepth[idx] > 0 and disp > 0:
-                            if args.saveTrainDepthResults:
-                                toKeep["imageName"].append(sample_name + '.png')
-                                toKeep["u"].append(pixelU[idx])
-                                toKeep["v"].append(pixelV[idx])
-                                toKeep["disparity"].append(disp)
-                                toKeep["depth"].append(calculatedDepth[idx])
-                                toKeep["GTDepth"].append(gtDepth[idx])
-                            savedDepth.append(calculatedDepth[idx])
-                            savedGTDepth.append(gtDepth[idx])
-                            perImageDepth["d"].append(calculatedDepth[idx])
-                            perImageDepth["gtD"].append(gtDepth[idx])
+                        if args.saveTrainDepthResults:
+                            toKeep["imageName"].append(sample_name + '.png')
+                            toKeep["u"].append(pixelU[idx])
+                            toKeep["v"].append(pixelV[idx])
+                            toKeep["disparity"].append(disp)
+                            toKeep["depth"].append(calculatedDepth[idx])
+                            toKeep["GTDepth"].append(gtDepth[idx])
+                        savedDepth.append(calculatedDepth[idx])
+                        savedGTDepth.append(gtDepth[idx])
+                        perImageDepth["d"].append(calculatedDepth[idx])
+                        perImageDepth["gtD"].append(gtDepth[idx])
 
-                    if args.perImageStatistic:
+                    if args.perImageStatistic and args.outlierReject:
                         print(f'RMSE for image {sample_name}: {mean_squared_error(perImageDepth["d"], perImageDepth["gtD"], squared = False):.2f}, Matches: {len(perImageDepth["d"])}')
                 
                 rmseVariance.append(mean_squared_error(perImageDepth["d"], perImageDepth["gtD"], squared = False))
@@ -258,9 +222,8 @@ if __name__ == "__main__":
         img_left_withKP=cv.drawKeypoints(img_left,kp1,img_left)
         cv.imwrite(test_detection_dir + '/' + f'{sample_name}_left.jpg',img_left_withKP)
         
-
-        # Creates a dataframe to later create a csv containing all descriptors for all keypoints in image
         if args.saveDetectorFeaturesOnTestSet:
+            # Creates a dataframe to later create a csv containing all descriptors for all keypoints in image
             toKeep = {"left-right":[], "imageName": [], "x": [], "y": [], "feat": []}
             for idx,kp in enumerate(kp1):
                 toKeep["left-right"].append("left")
@@ -275,22 +238,17 @@ if __name__ == "__main__":
                 toKeep["y"].append(int(kp.pt[1]))
                 toKeep["feat"].append(list(des2[idx]))
             
-        
-        # Perform feature matching (without outlier rejection)
         if not args.outlierReject:
-            # Match descriptors.
+            # Perform feature matching (without outlier rejection)
             matches = flann.match(des1,des2)
             # Filter match to be same y axis pixel
             idxToKeep = support.checkIfYMatches(kp1, kp2, matches)
-            keptMatches = [matches[i] for i in idxToKeep]
+            matches = [matches[i] for i in idxToKeep]
 
-            img = cv.drawMatches(img_left, kp1, img_right, kp2, keptMatches, None, flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+            img = cv.drawMatches(img_left, kp1, img_right, kp2, matches, None, flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
             cv.imwrite(test_matching_without_rej_dir + '/' + f'{sample_name}.jpg', img)
-
-        # Perform feature matching (with outlier rejection)
-        if args.outlierReject:
-
-            # Match descriptors.
+        elif args.outlierReject:
+            # Perform feature matching (with outlier rejection)
             matches = flann.knnMatch(des1, des2, k=2)
             # Apply ratio test
             matchesPassingRatioTest = []
@@ -310,7 +268,6 @@ if __name__ == "__main__":
             disparity, _, pixelU, pixelV = support.calculateResults(kp1, kp2, keptMatches)
             calculatedDepth = list(focal*baseline/disparity)
             
-            # TODO: To test this following output
             # Output
             for u, v, disp, depth in zip(pixelU, pixelV, disparity, calculatedDepth):
                 line = "{} {:.2f} {:.2f} {:.2f} {:.2f}".format(sample_name, u, v, disp, depth)

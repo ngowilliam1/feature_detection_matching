@@ -16,7 +16,7 @@ bash Miniconda3-latest-Linux-x86_64.sh
 conda env create -f environment.yml
 
 # activate the conda environment
-source activate tempAss2
+source activate feat_detect_matching
 
 ```
 
